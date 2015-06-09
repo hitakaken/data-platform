@@ -39,6 +39,7 @@ public class ReadExcelBuilder implements CommandBuilder {
         private final String dataSheet;
         private final List<String> columnNames;
         private final List<String> columnNameMap;
+        private final List<String> columnSeparatorMap;
         private final int ignoreRows;
         private final int rowAsHeader;
         private final boolean trim;
@@ -52,10 +53,11 @@ public class ReadExcelBuilder implements CommandBuilder {
             this.schemaSheet = getConfigs().getString(config, "schemaSheet");
             this.dataSheet = getConfigs().getString(config, "dataSheet");
             this.columnNames = getConfigs().getStringList(config, "columns");
-            this.columnNameMap = getConfigs().getStringList(config, "map");
+            this.columnNameMap = getConfigs().getStringList(config, "fields");
+            this.columnSeparatorMap = getConfigs().getStringList(config, "separators");
             this.charset = getConfigs().getCharset(config, "charset", null);
             this.ignoreRows = getConfigs().getInt(config, "ignoreRowNum", 0);
-            this.rowAsHeader = getConfigs().getInt(config, "ignoreRowNum", 1);
+            this.rowAsHeader = getConfigs().getInt(config, "rowAsHeader", 1);
             this.trim = getConfigs().getBoolean(config, "trim", true);
             this.addEmptyStrings = getConfigs().getBoolean(config, "addEmptyStrings", false);
             this.maxCharactersPerRecord = getConfigs().getInt(config, "maxCharactersPerRecord", 1000 * 1000);
