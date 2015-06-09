@@ -40,6 +40,7 @@ public class ReadExcelBuilder implements CommandBuilder {
         private final List<String> columnNames;
         private final List<String> columnNameMap;
         private final List<String> columnSeparatorMap;
+        private final List<String> columnTagMap;
         private final int ignoreRows;
         private final int rowAsHeader;
         private final boolean trim;
@@ -50,11 +51,12 @@ public class ReadExcelBuilder implements CommandBuilder {
         public ReadExcel(CommandBuilder builder, Config config, Command parent, Command child, MorphlineContext context) {
             super(builder,config,parent,child,context);
             this.separator = getConfigs().getString(config, "separator", ",");
-            this.schemaSheet = getConfigs().getString(config, "schemaSheet");
-            this.dataSheet = getConfigs().getString(config, "dataSheet");
+            this.schemaSheet = getConfigs().getString(config, "schema");
+            this.dataSheet = getConfigs().getString(config, "data");
             this.columnNames = getConfigs().getStringList(config, "columns");
             this.columnNameMap = getConfigs().getStringList(config, "fields");
             this.columnSeparatorMap = getConfigs().getStringList(config, "separators");
+            this.columnTagMap = getConfigs().getStringList(config, "tags");
             this.charset = getConfigs().getCharset(config, "charset", null);
             this.ignoreRows = getConfigs().getInt(config, "ignoreRowNum", 0);
             this.rowAsHeader = getConfigs().getInt(config, "rowAsHeader", 1);
@@ -73,7 +75,7 @@ public class ReadExcelBuilder implements CommandBuilder {
             Record template = inputRecord.copy();
             removeAttachments(template);
             Charset detectedCharset = detectCharset(inputRecord, charset);
-            Workbook workbook;
+            Workbook workbook = new ;
             BufferedReader reader = new BufferedReader(
                     new InputStreamReader(stream, detectedCharset), getBufferSize(stream));
             if (ignoreFirstLine) {

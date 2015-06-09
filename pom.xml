@@ -23,6 +23,8 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <!-- Keep this updated to the latest Kite release! -->
         <kite.version>1.0.0</kite.version>
+        <cdh5.version>5.4.1</cdh5.version>
+        <kite.dep.version>${kite.version}-cdh${cdh5.version}</kite.dep.version>
         <!-- Dynamic Language Support -->
         <groovy.version>2.4.3</groovy.version>
         <scala.version>2.10.5</scala.version>
@@ -52,19 +54,19 @@
         <dependency>
             <groupId>org.kitesdk</groupId>
             <artifactId>kite-hadoop-cdh5-dependencies</artifactId>
-            <version>${kite.version}</version>
+            <version>${kite.dep.version}</version>
             <type>pom</type>
         </dependency>
         <dependency>
             <groupId>org.kitesdk</groupId>
             <artifactId>kite-hbase-cdh5-dependencies</artifactId>
-            <version>${kite.version}</version>
+            <version>${kite.dep.version}</version>
             <type>pom</type>
         </dependency>
         <dependency>
             <groupId>org.kitesdk</groupId>
             <artifactId>kite-morphlines-all</artifactId>
-            <version>${kite.version}</version>
+            <version>${kite.dep.version}</version>
             <type>pom</type>
         </dependency>
 
@@ -100,14 +102,14 @@
             <artifactId>kite-morphlines-core</artifactId>
             <type>test-jar</type>
             <scope>test</scope>
-            <version>${kite.version}</version>
+            <version>${kite.dep.version}</version>
         </dependency>
         <dependency>
             <groupId>org.kitesdk</groupId>
             <artifactId>kite-data-core</artifactId>
             <type>test-jar</type>
             <scope>test</scope>
-            <version>${kite.version}</version>
+            <version>${kite.dep.version}</version>
         </dependency>
         <dependency>
             <groupId>junit</groupId>
