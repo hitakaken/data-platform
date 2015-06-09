@@ -94,6 +94,33 @@
             <artifactId>guice-assistedinject</artifactId>
             <version>${google.guice.version}</version>
         </dependency>
+
+        <dependency>
+            <groupId>org.kitesdk</groupId>
+            <artifactId>kite-morphlines-core</artifactId>
+            <type>test-jar</type>
+            <scope>test</scope>
+            <version>${kite.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.kitesdk</groupId>
+            <artifactId>kite-data-core</artifactId>
+            <type>test-jar</type>
+            <scope>test</scope>
+            <version>${kite.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>junit</groupId>
+            <artifactId>junit</artifactId>
+            <scope>test</scope>
+            <version>4.10</version>
+        </dependency>
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-log4j12</artifactId>
+            <scope>test</scope>
+            <version>1.7.5</version>
+        </dependency>
     </dependencies>
 
     <build>
