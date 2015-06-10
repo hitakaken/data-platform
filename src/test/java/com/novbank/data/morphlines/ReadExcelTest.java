@@ -1,10 +1,7 @@
-package com.novbank.data.excel;
+package com.novbank.data.morphlines;
 
 import com.google.common.collect.ImmutableMap;
-import com.novbank.data.AbstractHDFSTest;
-import com.novbank.data.ExtFields;
 import com.typesafe.config.ConfigFactory;
-import org.apache.hadoop.fs.Path;
 import org.junit.Test;
 import org.kitesdk.morphline.api.Record;
 import org.kitesdk.morphline.base.Fields;

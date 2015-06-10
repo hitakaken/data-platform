@@ -1,10 +1,10 @@
-package com.novbank.data.excel;
+package com.novbank.data.morphlines;
 
 import com.google.common.base.Strings;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
-import com.google.common.collect.Sets;
+import com.google.common.collect.*;
 import com.typesafe.config.Config;
+import org.apache.commons.lang.NumberUtils;
+import org.apache.commons.lang.StringUtils;
 import org.apache.poi.openxml4j.exceptions.InvalidFormatException;
 import org.apache.poi.ss.usermodel.*;
 import org.kitesdk.morphline.api.Command;
@@ -402,20 +402,100 @@ public class ReadExcelBuilder implements CommandBuilder {
         private Map<String, String> columnNameToDefaultValue;
 
         private Record readRow( Row row, Record template) throws IOException {
+            //使用临时Map
+            Multimap<String,Object> temp = ArrayListMultimap.create() ;
+            //优先处理必填项
+            for(Integer index : requires){
+                String text = convertCellValueToString(row.getCell(index));
+                //必填项不存在返回null
+                if(text == null) return null;
+                addValue(temp, index, text,  template);
+            }
+            for(String columnName : columnNameToField.keySet()){
+                Integer index = columnNameToIndex.get(columnName);
+                if(requires.contains(index)) continue;
+                String text = convertCellValueToString(row.getCell(index));
+                addValue(temp, index, text, template);
+            }
             Record outputRecord = template.copy();
-            for (Iterator<Cell> iterator = row.cellIterator(); iterator.hasNext();){
-                Cell cell = iterator.next();
-                if(columnIndexToName.containsKey(cell.getColumnIndex())){
-                    String columnName = columnIndexToName.get(cell.getColumnIndex());
-                    String text = convertCellValueToString(cell);
-                    String field = columnNameToField.get(columnName);
-                    if(Strings.isNullOrEmpty(text)) continue;
-                    if(trim) text = text.trim();
-                    if(Strings.isNullOrEmpty(text)) continue;
-                    outputRecord.put(field,text);
+            for(String field : temp.keySet()){
+                for(Object value : temp.get(field)){
+                    outputRecord.put(field,value);
                 }
             }
             return outputRecord;
+        }
+
+        private void addValue(final Multimap<String, Object> temp, Integer index, String text,Record template) {
+            String columnName = columnIndexToName.get(index);
+            String field = columnNameToField.get(columnName);
+            String rawValue = Strings.isNullOrEmpty(text) && columnNameToDefaultValue.containsKey(columnName)?
+                    columnNameToDefaultValue.get(columnName) : text;
+            if(Strings.isNullOrEmpty(rawValue)) return;
+            if(trim) rawValue = rawValue.trim();
+            if(Strings.isNullOrEmpty(rawValue)) return;
+            String[] rawValues = columnNameToSeparator.containsKey(columnName)?
+                    columnNameToSeparator.get(columnName).split(rawValue) : new String[]{rawValue};
+            String tag = columnNameToTag.containsKey(columnName)?columnNameToTag.get(columnName):null;
+            Set<String> types = columnNameToType.containsKey(columnName)?columnNameToType.get(columnName):Sets.newHashSet("文本");
+            for(String childValue : rawValues){
+                if(trim) childValue = childValue.trim();
+                if(Strings.isNullOrEmpty(childValue)) continue;
+                //解析
+                Object value = null;
+                if(types.contains("文件") || types.contains("链接")  || types.contains("文件链接") || types.contains("网站链接")){
+                    //补完相对路径
+                    if(!childValue.contains("://") && !childValue.startsWith("/")&& template.getFields().containsKey(ExtFields.SOURCE_FILE_LOCATION)){
+                        String location = (String) template.getFirstValue(ExtFields.SOURCE_FILE_LOCATION);
+                        value = location.endsWith("/") ? location+childValue:location+"/"+childValue;
+                    }else
+                        value = childValue;
+                }
+                if(value == null && (types.contains("时间") || types.contains("日期"))){
+                    String yearStr = "";
+                    boolean yearEnd = false;
+                    String monthStr = "";
+                    boolean monthEnd = false;
+                    String dayStr = "";
+                    boolean dayEnd = false;
+                    for(int i=0; i<childValue.length();i++){
+                        if(Character.isDigit(childValue.charAt(i))){
+                            if(!yearEnd && yearStr.length()<4){
+                                yearStr = yearStr + childValue.charAt(i);
+                                if(yearStr.length() == 4)
+                                    yearEnd = true;
+                            }else if(!monthEnd && monthStr.length()<2){
+                                monthStr = monthStr + childValue.charAt(i);
+                                if(monthStr.length() == 2)
+                                    monthEnd = true;
+                            }else if(!dayEnd && dayStr.length()<2){
+                                dayStr = dayStr + childValue.charAt(i);
+                                if(dayStr.length() == 2)
+                                    dayEnd = true;
+                            }
+                        }else{
+                            if(!yearEnd && yearStr.length()>1)
+                                yearEnd = true;
+                            else if(!monthEnd && monthStr.length()>0)
+                                monthEnd = true;
+                            else if(!dayEnd && dayStr.length()>0)
+                                dayEnd = true;
+                        }
+                    }
+                    if(yearStr.length()>1){
+                        value = yearStr + (monthStr.length()>0?"-"+monthStr:"") + (dayStr.length()>0?"-"+dayStr:"") ;
+                    }
+                }
+                if(value == null && (types.contains("数字") || types.contains("数值"))){
+                    if(StringUtils.isNumeric(childValue))
+                        value = NumberUtils.createNumber(childValue);
+                }
+                if(value == null && types.contains("文本")){
+                    value=childValue;
+                }
+                if(value!=null)
+                    temp.put(field,value);
+            }
         }
 
         private String convertCellValueToString(Cell cell){

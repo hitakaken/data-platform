@@ -1,7 +1,6 @@
-package com.novbank.data.file;
+package com.novbank.data.morphlines;
 
 import com.google.common.collect.ImmutableMap;
-import com.novbank.data.AbstractHDFSTest;
 import com.typesafe.config.ConfigFactory;
 import org.junit.Test;
 import org.kitesdk.morphline.api.Record;

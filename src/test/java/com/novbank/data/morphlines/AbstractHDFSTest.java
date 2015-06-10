@@ -1,4 +1,4 @@
-package com.novbank.data;
+package com.novbank.data.morphlines;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
