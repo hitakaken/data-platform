@@ -1,22 +1,25 @@
 package com.novbank.data.excel;
 
+import com.google.common.base.Strings;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.typesafe.config.Config;
-import org.apache.poi.ss.usermodel.Workbook;
+import org.apache.poi.openxml4j.exceptions.InvalidFormatException;
+import org.apache.poi.ss.usermodel.*;
 import org.kitesdk.morphline.api.Command;
 import org.kitesdk.morphline.api.CommandBuilder;
 import org.kitesdk.morphline.api.MorphlineContext;
 import org.kitesdk.morphline.api.Record;
 import org.kitesdk.morphline.base.Validator;
 import org.kitesdk.morphline.stdio.AbstractParser;
-
-import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.nio.charset.Charset;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.List;
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
+import java.util.*;
+import java.util.regex.Pattern;
 
 /**
  * Created by hp on 2015/6/9.
@@ -33,36 +36,114 @@ public class ReadExcelBuilder implements CommandBuilder {
     }
 
     private static final class ReadExcel extends AbstractParser {
-        private final String separator;
+        /**
+         * 文件编码
+         */
         private final Charset charset;
-        private final String schemaSheet;
-        private final String dataSheet;
-        private final List<String> columnNames;
-        private final List<String> columnNameMap;
-        private final List<String> columnSeparatorMap;
-        private final List<String> columnTagMap;
+
+        /**
+         * 自定义Schema表名
+         */
+        private final String schemaSheetName;
+        /**
+         * 转换数据的表名
+         */
+        private final String dataSheetName;
+        /**
+         * 读取的列（为空，则读取所有在列名->字段名中有映射的列）
+         */
+        private List<String> columnNames;
+        /**
+         * 必填存在值的列名（否则则忽略）
+         */
+        private List<String> requiredColumnNames;
+        /**
+         * 列名 -> 字段名的映射
+         */
+        private List<String> columnNameList;
+        /**
+         * 列名对应类型，默认为文本
+         */
+        private List<String> columnTypeList;
+        /**
+         * 默认值
+         */
+        private List<String> defaultValues;
+        /**
+         * 列对应的分隔符（null则不分隔）
+         */
+        private List<String> columnSeparatorList;
+        /**
+         * 默认分隔符（null则不分隔）
+         */
+        private final String defaultSeparator;
+        /**
+         * 列对应值的tag
+         */
+        private List<String> columnTagList;
+        /**
+         * 自标题行开始，忽略的记录行
+         */
         private final int ignoreRows;
+        /**
+         * 标题行所在的列，-1表示不使用标题行
+         */
         private final int rowAsHeader;
+        /**
+         * 如果不使用标题行，则使用前缀+序号标识
+         */
+        private final String columnNumAsHeaderPrefix;
+        /**
+         * 是否去空格
+         */
         private final boolean trim;
+        /**
+         * 是否添加空值
+         */
         private final boolean addEmptyStrings;
+        /**
+         * 最大字符串长度
+         */
         private final int maxCharactersPerRecord;
+        /**
+         * 是否忽略过长记录（未实现）
+         */
         private final boolean ignoreTooLongRecords;
+        /**
+         * 日期格式
+         */
+        private final DateFormat dateFormat;
+        /**
+         * 时间格式
+         */
+        private final DateFormat timeFormat;
+        /**
+         * 日期时间格式
+         */
+        private final DateFormat dateTimeFormat;
 
         public ReadExcel(CommandBuilder builder, Config config, Command parent, Command child, MorphlineContext context) {
             super(builder,config,parent,child,context);
-            this.separator = getConfigs().getString(config, "separator", ",");
-            this.schemaSheet = getConfigs().getString(config, "schema");
-            this.dataSheet = getConfigs().getString(config, "data");
-            this.columnNames = getConfigs().getStringList(config, "columns");
-            this.columnNameMap = getConfigs().getStringList(config, "fields");
-            this.columnSeparatorMap = getConfigs().getStringList(config, "separators");
-            this.columnTagMap = getConfigs().getStringList(config, "tags");
+            this.schemaSheetName = getConfigs().getString(config, "schema",null);
+            this.dataSheetName = getConfigs().getString(config, "data");
+            this.columnNames = getConfigs().getStringList(config, "columns",null);
+            this.requiredColumnNames = getConfigs().getStringList(config, "requires",null);
+            this.defaultValues = getConfigs().getStringList(config, "defaultValues", null);
+            this.columnTypeList = getConfigs().getStringList(config,"types",null);
+            this.columnNameList = getConfigs().getStringList(config, "fields",null);
+            this.columnSeparatorList = getConfigs().getStringList(config, "separators",null);
+            this.defaultSeparator = getConfigs().getString(config, "defaultSeparator", null);
+            this.columnTagList = getConfigs().getStringList(config, "tags",null);
             this.charset = getConfigs().getCharset(config, "charset", null);
-            this.ignoreRows = getConfigs().getInt(config, "ignoreRowNum", 0);
-            this.rowAsHeader = getConfigs().getInt(config, "rowAsHeader", 1);
+            this.rowAsHeader = getConfigs().getInt(config, "rowAsHeader", 0);
+            this.columnNumAsHeaderPrefix = getConfigs().getString(config, "columnNumAsHeaderPrefix", "col_");
+            this.ignoreRows = getConfigs().getInt(config, "ignoreRows", 0);
             this.trim = getConfigs().getBoolean(config, "trim", true);
             this.addEmptyStrings = getConfigs().getBoolean(config, "addEmptyStrings", false);
             this.maxCharactersPerRecord = getConfigs().getInt(config, "maxCharactersPerRecord", 1000 * 1000);
+            this.dateFormat = new SimpleDateFormat(getConfigs().getString(config,"dataFormat","yyyy-MM-dd"));
+            this.timeFormat = new SimpleDateFormat(getConfigs().getString(config,"timeFormat","HH:mm:ss"));
+            this.dateTimeFormat = new SimpleDateFormat(getConfigs().getString(config,"dateTimeFormat","yyyy-MM-dd HH:mm:ss"));
             this.ignoreTooLongRecords = new Validator<OnMaxCharactersPerRecord>().validateEnum(
                     config,
                     getConfigs().getString(config, "onMaxCharactersPerRecord", OnMaxCharactersPerRecord.throwException.toString()),
@@ -74,67 +155,298 @@ public class ReadExcelBuilder implements CommandBuilder {
         protected boolean doProcess(Record inputRecord, InputStream stream) throws IOException {
             Record template = inputRecord.copy();
             removeAttachments(template);
-            Charset detectedCharset = detectCharset(inputRecord, charset);
-            Workbook workbook = new ;
-            BufferedReader reader = new BufferedReader(
-                    new InputStreamReader(stream, detectedCharset), getBufferSize(stream));
-            if (ignoreFirstLine) {
-                reader.readLine();
-            }
-
-            while (true) {
-                Record outputRecord = readNext(reader, template);
-                if (outputRecord == null) {
-                    break;
-                }
-                incrementNumRecords();
-
-                // pass record to next command in chain:
-                if (!getChild().process(outputRecord)) {
+            //Charset detectedCharset = detectCharset(inputRecord, charset);
+            try {
+                Workbook workbook = WorkbookFactory.create(stream) ;
+                //获取数据 Sheet
+                Sheet dataSheet = workbook.getSheet(dataSheetName);
+                //Sheet不存在中止
+                if(dataSheet == null) {
                     return false;
                 }
+                //查找标题栏
+                Row headerRow = rowAsHeader <0 ? null : dataSheet.getRow(rowAsHeader);
+                //查找第一列
+                Row dataRow = null;
+                int rowNum = headerRow != null ? headerRow.getRowNum() + 1 + ignoreRows : ignoreRows;
+                while(dataRow == null && rowNum<=dataSheet.getLastRowNum()){
+                    dataRow = dataSheet.getRow(rowNum);
+                    rowNum ++;
+                }
+                //未找到第一列，则返回
+                if(dataRow == null) return false;
+                //创建列序->列名 映射
+                columnIndexToName = Maps.newHashMap();
+                columnNameToIndex = Maps.newHashMap();
+                for(Iterator<Cell> iterator = headerRow!=null?headerRow.cellIterator():dataRow.cellIterator(); iterator.hasNext();){
+                    Cell cell = iterator.next();
+                    String headerText = headerRow!=null?convertCellValueToString(cell) : columnNumAsHeaderPrefix + cell.getColumnIndex();
+                    if(Strings.isNullOrEmpty(headerText)) continue;
+                    headerText = headerText.trim();
+                    if(Strings.isNullOrEmpty(headerText)) continue;
+                    columnIndexToName.put(cell.getColumnIndex(),headerText);
+                    columnNameToIndex.put(headerText,cell.getColumnIndex());
+                }
+                //解析 Schema
+                Sheet schemaSheet = Strings.isNullOrEmpty(schemaSheetName)? null : workbook.getSheet(schemaSheetName);
+                if( schemaSheet != null)  generateConfig(schemaSheet);
+                //解析失败，返回
+                if(!generateSchemaBySettings())
+                    return false;
+                //读取数据
+                while(rowNum <= dataSheet.getLastRowNum()+1){
+                    if(dataRow!=null){
+                        Record outputRecord = readRow(dataRow, template);
+                        System.out.println(outputRecord);
+                        // pass record to next command in chain:
+                        if(!getChild().process(outputRecord)){
+                            return false;
+                        }
+                    }
+                    dataRow =  dataSheet.getRow(rowNum);
+                    rowNum++;
+                }
+            } catch (InvalidFormatException e) {
+                e.printStackTrace();
             }
             return true;
         }
 
-        private Record readNext(BufferedReader reader, Record template) throws IOException {
-            while (true) {
-                String line = reader.readLine();
-                if (line == null) {
+        private static final Set<String> SCHEMA_DISPLAY_COLUMN_NAMES = new HashSet<String>(){{add("显示");add("display");add("column");}};
+        private static final Set<String> SCHEMA_DISPLAY_FIELD_NAMES = new HashSet<String>(){{add("字段");add("field");}};
+        private static final Set<String> SCHEMA_DISPLAY_TYPE_NAMES = new HashSet<String>(){{add("类型");add("type");}};
+        private static final Set<String> SCHEMA_DISPLAY_TAG_NAMES = new HashSet<String>(){{add("额外标签");add("标签");add("tag");}};
+        private static final Set<String> SCHEMA_DISPLAY_SEPARATOR_NAMES = new HashSet<String>(){{add("分隔符");add("separator");}};
+        private static final Set<String> SCHEMA_DISPLAY_PROPERTY_NAMES = new HashSet<String>(){{add("属性");add("property");}};
+        private static final Set<String> SCHEMA_DISPLAY_DEFAULT_NAMES = new HashSet<String>(){{add("默认值");add("default");}};
+
+        private void generateConfig(Sheet schemaSheet) {
+            Row header = schemaSheet.getRow(0);
+            int displayIndex = -1;
+            int fieldIndex = -1;
+            int typeIndex = -1;
+            int tagIndex = -1;
+            int separatorIndex = -1;
+            int propertyIndex = -1;
+            int defaultIndex = -1;
+            //读取列序
+            for(Iterator<Cell> iterator = header.cellIterator();iterator.hasNext();){
+                Cell cell = iterator.next();
+                String text = convertCellValueToString(cell);
+                if(text == null) return;
+                if(displayIndex<0 && SCHEMA_DISPLAY_COLUMN_NAMES.contains(text.toLowerCase())){
+                    displayIndex = cell.getColumnIndex();
+                }else if(fieldIndex<0 && SCHEMA_DISPLAY_FIELD_NAMES.contains(text.toLowerCase())){
+                    fieldIndex = cell.getColumnIndex();
+                }else if(typeIndex<0 && SCHEMA_DISPLAY_TYPE_NAMES.contains(text.toLowerCase())){
+                    typeIndex = cell.getColumnIndex();
+                }else if(tagIndex<0 && SCHEMA_DISPLAY_TAG_NAMES.contains(text.toLowerCase())){
+                    tagIndex = cell.getColumnIndex();
+                }else if(separatorIndex<0 && SCHEMA_DISPLAY_SEPARATOR_NAMES.contains(text.toLowerCase())){
+                    separatorIndex = cell.getColumnIndex();
+                }else if(propertyIndex<0 && SCHEMA_DISPLAY_PROPERTY_NAMES.contains(text.toLowerCase())){
+                    propertyIndex = cell.getColumnIndex();
+                }else if(defaultIndex<0 && SCHEMA_DISPLAY_DEFAULT_NAMES.contains(text.toLowerCase())){
+                    defaultIndex = cell.getColumnIndex();
+                }
+            }
+            if(displayIndex<0) return;
+            List<String> columnNames = Lists.newArrayList();
+            List<String> requiredColumnNames = Lists.newArrayList();
+            List<String> columnNameList = Lists.newArrayList();
+            List<String> columnTypeList = Lists.newArrayList();
+            List<String> defaultValues = Lists.newArrayList();
+            List<String> columnSeparatorList = Lists.newArrayList();
+            List<String> columnTagList = Lists.newArrayList();
+            for(int rowNum = 1; rowNum<= schemaSheet.getLastRowNum(); rowNum++){
+                Row row = schemaSheet.getRow(rowNum);
+                String display = convertCellValueToString(row.getCell(displayIndex));
+                if(Strings.isNullOrEmpty(display)) continue;
+                columnNames.add(display);
+                //列名->字段映射
+                columnNameList.add(display);
+                columnNameList.add(convertCellValueToString(fieldIndex <0?null:row.getCell(fieldIndex)));
+                //列类型
+                String type = convertCellValueToString(typeIndex <0?null:row.getCell(typeIndex));
+                columnTypeList.add(display);
+                columnTypeList.add(type!=null?"文本":type);
+                //默认值
+                defaultValues.add(display);
+                defaultValues.add(convertCellValueToString(defaultIndex <0?null:row.getCell(defaultIndex)));
+                //属性
+                String property = convertCellValueToString(tagIndex < 0 ? null : row.getCell(propertyIndex));
+                if(property!=null && property.contains("必填"))
+                    requiredColumnNames.add(display);
+                //分隔符
+                String separator = convertCellValueToString(separatorIndex < 0 ? null : row.getCell(separatorIndex));
+                if(property!=null && property.contains("多值") && Strings.isNullOrEmpty(separator)) separator =defaultSeparator;
+                columnSeparatorList.add(display);
+                columnSeparatorList.add(separator);
+                //标签
+                columnTagList.add(display);
+                columnTagList.add(convertCellValueToString(tagIndex < 0 ? null : row.getCell(tagIndex)));
+
+                this.columnNames = columnNames;
+                this.requiredColumnNames = requiredColumnNames;
+                this.columnNameList = columnNameList;
+                this.columnTypeList = columnTypeList;
+                this.defaultValues = defaultValues;
+                this.columnSeparatorList = columnSeparatorList;
+                this.columnTagList = columnTagList;
+            }
+        }
+
+        private boolean generateSchemaBySettings() {
+            //校验必填列是否存在
+            requires = Sets.newHashSet();
+            if(requiredColumnNames!=null){
+                for(String requireColumnName: requiredColumnNames){
+                    if (!columnNameToIndex.containsKey(requireColumnName))
+                        return false;
+                    requires.add(columnNameToIndex.get(requireColumnName));
+                }
+            }
+            //列名<-->字段映射
+            columnNameToField = Maps.newHashMap();
+            if(columnNameList == null && columnNames == null){
+                columnNames = Lists.newArrayList();
+                columnNames.addAll(columnNameToIndex.keySet());
+            }
+            if(columnNameList!=null){
+                for(int i = 0; i<columnNameList.size()-1;i+=2){
+                    String columnName = columnNameList.get(i);
+                    if(!columnNameToIndex.containsKey(columnName)) continue;
+                    String fieldName = i+1<columnNameList.size()?columnNameList.get(i+1):null;
+                    if(fieldName == null) fieldName = columnName;
+                    columnNameToField.put(columnName,fieldName);
+                }
+            }
+            if(columnNames!=null){
+                for(String columnName : columnNames){
+                    if(!columnNameToField.containsKey(columnName) && columnNameToIndex.containsKey(columnName))
+                        columnNameToField.put(columnName,columnName);
+                }
+            }
+            for(int require : requires){
+                if(!columnNameToField.containsKey(columnIndexToName.get(require)))
+                    columnNameToField.put(columnIndexToName.get(require),columnIndexToName.get(require));
+            }
+            //列名<-->分隔符
+            columnNameToSeparator = Maps.newHashMap();
+            if(columnSeparatorList!=null){
+                for(int i = 0; i<columnSeparatorList.size()-1;i+=2){
+                    String columnName = columnSeparatorList.get(i);
+                    if(!columnNameToField.containsKey(columnName)) continue;
+                    String separator = i+1<columnSeparatorList.size()?columnSeparatorList.get(i+1):null;
+                    if(separator != null)
+                        columnNameToSeparator.put(columnName,Pattern.compile(separator));
+                }
+            }
+            //列名<-->标签
+            columnNameToTag = Maps.newHashMap();
+            if(columnTagList!=null){
+                for(int i = 0; i<columnTagList.size()-1;i+=2){
+                    String columnName = columnTagList.get(i);
+                    if(!columnNameToField.containsKey(columnName)) continue;
+                    String tag = i+1<columnTagList.size()?columnTagList.get(i+1):null;
+                    if(tag != null)
+                        columnNameToTag.put(columnName,tag);
+                }
+            }
+            //列名<-->默认值
+            columnNameToDefaultValue = Maps.newHashMap();
+            if(defaultValues!=null){
+                for(int i = 0; i<defaultValues.size()-1;i+=2){
+                    String columnName = defaultValues.get(i);
+                    if(!columnNameToField.containsKey(columnName)) continue;
+                    String defaultValue = i+1<defaultValues.size()?defaultValues.get(i+1):null;
+                    if(defaultValue != null)
+                        columnNameToDefaultValue.put(columnName,defaultValue);
+                }
+            }
+            //列名<-->类型
+            columnNameToType = Maps.newHashMap();
+            if(columnTypeList!=null){
+                for(int i = 0; i<columnTypeList.size()-1;i+=2){
+                    String columnName = columnTypeList.get(i);
+                    if(!columnNameToField.containsKey(columnName)) continue;
+                    String types = i+1<columnTypeList.size()?columnTypeList.get(i+1):null;
+                    if(types != null){
+                        columnNameToType.put(columnName,Sets.newHashSet(types.split("[ ,，;；]+")));
+                    }
+                }
+            }
+            for ( String columnName : columnNameToField.keySet()){
+                if(!columnNameToType.containsKey(columnName))
+                    columnNameToType.put(columnName,Sets.newHashSet("文本"));
+            }
+            //清理不需要解析的列
+            Set<String> removeColumnName = Sets.newHashSet();
+            for(String columnName : columnNameToField.keySet()){
+                if(!columnNameToField.containsKey(columnName))
+                    removeColumnName.add(columnName);
+            }
+            for(String columnName : removeColumnName){
+                columnIndexToName.remove(columnNameToIndex.remove(columnName));
+            }
+            return true;
+        }
+
+        private Map<Integer, String> columnIndexToName;
+        private Map<String, Integer> columnNameToIndex;
+        private Set<Integer> requires;
+        private Map<String, String> columnNameToField;
+        private Map<String, Pattern> columnNameToSeparator;
+        private Map<String, String> columnNameToTag;
+        private Map<String, Set<String>> columnNameToType;
+        private Map<String, String> columnNameToDefaultValue;
+
+        private Record readRow( Row row, Record template) throws IOException {
+            Record outputRecord = template.copy();
+            for (Iterator<Cell> iterator = row.cellIterator(); iterator.hasNext();){
+                Cell cell = iterator.next();
+                if(columnIndexToName.containsKey(cell.getColumnIndex())){
+                    String columnName = columnIndexToName.get(cell.getColumnIndex());
+                    String text = convertCellValueToString(cell);
+                    String field = columnNameToField.get(columnName);
+                    if(Strings.isNullOrEmpty(text)) continue;
+                    if(trim) text = text.trim();
+                    if(Strings.isNullOrEmpty(text)) continue;
+                    outputRecord.put(field,text);
+                }
+            }
+            return outputRecord;
+        }
+
+        private String convertCellValueToString(Cell cell){
+            if(cell == null) return null;
+            switch (cell.getCellType()) {
+                case Cell.CELL_TYPE_BLANK:
                     return null;
-                }
-
-                if (!QuotedCSVTokenizer.verifyRecordLength(
-                        line.length(), maxCharactersPerRecord, line, ignoreTooLongRecords, LOG)) {
-                    continue; // ignore
-                }
-
-                if (ignoreEmptyLines && isTrimmedLineEmpty(line)) {
-                    continue; // ignore
-                }
-
-                if (commentPrefix.length() > 0 && line.startsWith(commentPrefix)) {
-                    continue; // ignore
-                }
-
-                Record outputRecord = template.copy();
-                if (!tokenizer.tokenizeLine(line, reader, outputRecord)) {
-                    continue; // ignore
-                }
-
-                return outputRecord;
+                case Cell.CELL_TYPE_BOOLEAN:
+                    return cell.getBooleanCellValue()?"true":"false";
+                case Cell.CELL_TYPE_ERROR:
+                    //text = ErrorEval.getText(cell.getErrorCellValue());
+                    return null;
+                case Cell.CELL_TYPE_FORMULA:
+                    break;
+                case Cell.CELL_TYPE_NUMERIC:
+                    if (DateUtil.isCellDateFormatted(cell)) {
+                        return dateFormat.format(cell.getDateCellValue());
+                    }
+                    return String.valueOf(cell.getNumericCellValue());
+                case Cell.CELL_TYPE_STRING:
+                    return cell.getStringCellValue();
+                default:
+                    return null;
             }
-        }
-
-        private boolean isTrimmedLineEmpty(String line) {
-//      return line.trim().length() == 0; // slow
-            int len = line.length();
-            for (int i = len; --i >= 0; ) {
-                if (line.charAt(i) > ' ') {
-                    return false;
-                }
+            switch(cell.getCachedFormulaResultType()) {
+                case Cell.CELL_TYPE_NUMERIC:
+                    return String.valueOf(cell.getNumericCellValue());
+                case Cell.CELL_TYPE_STRING:
+                    return cell.getRichStringCellValue().getString();
             }
-            return true;
+            return null;
         }
     }
 
