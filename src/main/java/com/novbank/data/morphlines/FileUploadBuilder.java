@@ -17,14 +17,14 @@ import java.util.*;
 /**
  * Created by CaoKe on 2015/6/10.
  */
-public class UploadLocalFileBuilder  implements CommandBuilder {
+public class FileUploadBuilder implements CommandBuilder {
     public Collection<String> getNames() {
         return Collections.singletonList("downloadHdfsFile");
     }
 
     public Command build(Config config, Command parent, Command child, MorphlineContext context) {
         try {
-            return new UploadLocalFileBuilder.UploadLocalFile(this, config, parent, child, context);
+            return new FileUploadBuilder.UploadLocalFile(this, config, parent, child, context);
         } catch (IOException var6) {
             throw new MorphlineCompilationException("Cannot compile", config, var6);
         }
