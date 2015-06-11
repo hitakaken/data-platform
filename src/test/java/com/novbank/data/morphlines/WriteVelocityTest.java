@@ -1,9 +1,6 @@
 package com.novbank.data.morphlines;
 
-import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
-import com.typesafe.config.ConfigFactory;
-import org.junit.Before;
 import org.junit.Test;
 import org.kitesdk.morphline.api.AbstractMorphlineTest;
 import org.kitesdk.morphline.api.Record;
@@ -17,13 +14,12 @@ import java.util.Map;
 import static org.junit.Assert.*;
 
 /**
- * Created by CaoKe on 2015/6/10.
+ * Created by hp on 2015/6/11.
  */
-public class WriteTSVTest extends AbstractMorphlineTest {
-
+public class WriteVelocityTest extends AbstractMorphlineTest {
     @Test
-    public void testWriteTSV() throws Exception {
-        morphline = createMorphline("test-morphlines/writeDocTSV");
+    public void testWriteVelocity() throws Exception {
+        morphline = createMorphline("test-morphlines/writeHTML");
 
         Map<String,Map<String,String>> users;
         File root;
@@ -81,6 +77,7 @@ public class WriteTSVTest extends AbstractMorphlineTest {
                         record.put(ExtFields.SOURCE_FILE_LOCATION,"/user/gvc/数据/"+user+"/2015/"+month+"/");
                         record.put(ExtFields.DOWNLOAD_ROOT,"/filebrowser/download/");
                         record.put(Fields.ATTACHMENT_BODY,in);
+
                         morphline.process(record);
                         in.close();
                     }
@@ -89,5 +86,4 @@ public class WriteTSVTest extends AbstractMorphlineTest {
 
         }
     }
-
 }

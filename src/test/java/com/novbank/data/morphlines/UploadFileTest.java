@@ -32,4 +32,16 @@ public class UploadFileTest extends AbstractHDFSTest{
         }
     }
 
+    @Test
+    public void testWWW() throws Exception{
+        File input =  new File("D:\\Workspace\\data\\全球价值链\\gvc\\site\\temp");
+        String out = "hdfs://10.1.20.93:8020/user/gvc/www/";
+        morphline = createMorphline("test-morphlines/uploadFile",
+                ConfigFactory.parseMap(
+                        ImmutableMap.of(
+                                "outputDir", out,
+                                "inputFile", input.toString()
+                        )));
+        morphline.process(new Record());
+    }
 }
