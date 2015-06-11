@@ -1,15 +1,24 @@
 package com.novbank.data.morphlines;
 
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Maps;
+import com.novbank.data.morphlines.AbstractHDFSTest;
+import com.novbank.data.morphlines.ExtFields;
 import com.typesafe.config.ConfigFactory;
+import org.junit.Before;
 import org.junit.Test;
 import org.kitesdk.morphline.api.Record;
 import org.kitesdk.morphline.base.Fields;
+
+import java.io.File;
+import java.util.Map;
 
 /**
  * Created by hp on 2015/6/9.
  */
 public class ReadExcelTest extends AbstractHDFSTest {
+
+
     @Test
     public void testReadExcel() throws Exception {
         String uploader = "张怡菁";

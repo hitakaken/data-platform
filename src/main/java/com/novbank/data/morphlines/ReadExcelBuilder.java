@@ -2,6 +2,7 @@ package com.novbank.data.morphlines;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.*;
+import com.novbank.data.morphlines.ExtFields;
 import com.typesafe.config.Config;
 import org.apache.commons.lang.NumberUtils;
 import org.apache.commons.lang.StringUtils;
@@ -199,8 +200,10 @@ public class ReadExcelBuilder implements CommandBuilder {
                         Record outputRecord = readRow(dataRow, template);
                         System.out.println(outputRecord);
                         // pass record to next command in chain:
-                        if(!getChild().process(outputRecord)){
-                            return false;
+                        if(outputRecord!=null){
+                            if(!getChild().process(outputRecord)){
+                                return false;
+                            }
                         }
                     }
                     dataRow =  dataSheet.getRow(rowNum);
@@ -269,7 +272,7 @@ public class ReadExcelBuilder implements CommandBuilder {
                 //列类型
                 String type = convertCellValueToString(typeIndex <0?null:row.getCell(typeIndex));
                 columnTypeList.add(display);
-                columnTypeList.add(type!=null?"文本":type);
+                columnTypeList.add(type==null?"文本":type);
                 //默认值
                 defaultValues.add(display);
                 defaultValues.add(convertCellValueToString(defaultIndex <0?null:row.getCell(defaultIndex)));
@@ -443,13 +446,17 @@ public class ReadExcelBuilder implements CommandBuilder {
                 if(Strings.isNullOrEmpty(childValue)) continue;
                 //解析
                 Object value = null;
-                if(types.contains("文件") || types.contains("链接")  || types.contains("文件链接") || types.contains("网站链接")){
+                if(types.contains("文件") || types.contains("链接")  || types.contains("文件链接") || types.contains("文件地址") ||types.contains("网站链接")){
+                    System.out.println("isFile");
                     //补完相对路径
                     if(!childValue.contains("://") && !childValue.startsWith("/")&& template.getFields().containsKey(ExtFields.SOURCE_FILE_LOCATION)){
                         String location = (String) template.getFirstValue(ExtFields.SOURCE_FILE_LOCATION);
                         value = location.endsWith("/") ? location+childValue:location+"/"+childValue;
                     }else
                         value = childValue;
+                    if(value!=null && value.toString().startsWith("/") && template.getFields().containsKey(ExtFields.DOWNLOAD_ROOT)){
+                        temp.put(field+"_download",template.getFirstValue(ExtFields.DOWNLOAD_ROOT).toString() + value);
+                    }
                 }
                 if(value == null && (types.contains("时间") || types.contains("日期"))){
                     String yearStr = "";
@@ -484,6 +491,7 @@ public class ReadExcelBuilder implements CommandBuilder {
                     }
                     if(yearStr.length()>1){
                         value = yearStr + (monthStr.length()>0?"-"+monthStr:"") + (dayStr.length()>0?"-"+dayStr:"") ;
+                        temp.put(field+"_year",yearStr);
                     }
                 }
                 if(value == null && (types.contains("数字") || types.contains("数值"))){
